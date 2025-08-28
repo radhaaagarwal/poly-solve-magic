@@ -24,6 +24,12 @@ export default {
 				ring: 'hsl(var(--ring))',
 				background: 'hsl(var(--background))',
 				foreground: 'hsl(var(--foreground))',
+				math: {
+					primary: 'hsl(var(--math-primary))',
+					secondary: 'hsl(var(--math-secondary))',
+					success: 'hsl(var(--math-success))',
+					warning: 'hsl(var(--math-warning))'
+				},
 				primary: {
 					DEFAULT: 'hsl(var(--primary))',
 					foreground: 'hsl(var(--primary-foreground))'
