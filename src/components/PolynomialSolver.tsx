@@ -3,9 +3,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { DataPoint } from "./DataPointInput";
 
 interface PolynomialCoefficients {
-  a: number;
-  b: number;
-  c: number;
+  coefficients: number[];
+  degree: number;
 }
 
 interface PolynomialSolverProps {
@@ -14,43 +13,86 @@ interface PolynomialSolverProps {
 
 export const PolynomialSolver = ({ dataPoints }: PolynomialSolverProps) => {
   const coefficients = useMemo(() => {
-    if (dataPoints.length < 3) return null;
+    if (dataPoints.length < 2) return null;
 
-    // Use first 3 points for quadratic interpolation
-    const [p1, p2, p3] = dataPoints.slice(0, 3);
-    
     try {
-      // Lagrange interpolation for quadratic polynomial
-      const lagrangePolynomial = (x: number): number => {
-        const l1 = ((x - p2.x) * (x - p3.x)) / ((p1.x - p2.x) * (p1.x - p3.x));
-        const l2 = ((x - p1.x) * (x - p3.x)) / ((p2.x - p1.x) * (p2.x - p3.x));
-        const l3 = ((x - p1.x) * (x - p2.x)) / ((p3.x - p1.x) * (p3.x - p2.x));
-        
-        return p1.y * l1 + p2.y * l2 + p3.y * l3;
-      };
-
-      // Extract coefficients by evaluating at specific points
-      // For f(x) = ax² + bx + c, we need to solve the system:
-      // f(x₁) = ax₁² + bx₁ + c = y₁
-      // f(x₂) = ax₂² + bx₂ + c = y₂  
-      // f(x₃) = ax₃² + bx₃ + c = y₃
-
-      const x1 = p1.x, y1 = p1.y;
-      const x2 = p2.x, y2 = p2.y;
-      const x3 = p3.x, y3 = p3.y;
-
-      // Using Cramer's rule to solve the linear system
-      const denominator = x1 * x1 * (x2 - x3) + x2 * x2 * (x3 - x1) + x3 * x3 * (x1 - x2);
+      // C++ equivalent algorithm:
+      /*
+      #include <vector>
+      #include <cmath>
       
-      if (Math.abs(denominator) < 1e-10) {
-        throw new Error("Points are collinear or too close");
+      std::vector<double> lagrangeInterpolation(const std::vector<std::pair<double, double>>& points) {
+          int n = points.size();
+          std::vector<double> coeffs(n, 0.0);
+          
+          for (int i = 0; i < n; i++) {
+              std::vector<double> basis(n, 0.0);
+              basis[n-1] = 1.0; // Start with polynomial 1
+              
+              double denominator = 1.0;
+              for (int j = 0; j < n; j++) {
+                  if (i != j) {
+                      denominator *= (points[i].first - points[j].first);
+                      
+                      // Multiply basis by (x - points[j].first)
+                      for (int k = 0; k < n-1; k++) {
+                          basis[k] += basis[k+1] * (-points[j].first);
+                      }
+                  }
+              }
+              
+              // Add contribution to final coefficients
+              for (int k = 0; k < n; k++) {
+                  coeffs[k] += (points[i].second * basis[k]) / denominator;
+              }
+          }
+          return coeffs;
       }
-
-      const a = (y1 * (x2 - x3) + y2 * (x3 - x1) + y3 * (x1 - x2)) / denominator;
-      const b = (x1 * x1 * (y2 - y3) + x2 * x2 * (y3 - y1) + x3 * x3 * (y1 - y2)) / denominator;
-      const c = (x1 * x1 * (x2 * y3 - x3 * y2) + x2 * x2 * (x3 * y1 - x1 * y3) + x3 * x3 * (x1 * y2 - x2 * y1)) / denominator;
-
-      return { a, b, c, lagrangePolynomial };
+      */
+      
+      const n = dataPoints.length;
+      const points = [...dataPoints]; // Copy for stability
+      
+      // Initialize coefficients array (degree n-1 polynomial has n coefficients)
+      const coeffs: number[] = new Array(n).fill(0);
+      
+      // Lagrange interpolation - compute each basis polynomial
+      for (let i = 0; i < n; i++) {
+        // Compute Lagrange basis polynomial Li(x)
+        const basis: number[] = new Array(n).fill(0);
+        basis[n - 1] = 1; // Start with polynomial "1"
+        
+        let denominator = 1;
+        
+        // Build basis polynomial and denominator
+        for (let j = 0; j < n; j++) {
+          if (i !== j) {
+            denominator *= (points[i].x - points[j].x);
+            
+            // Multiply current basis by (x - points[j].x)
+            for (let k = 0; k < n - 1; k++) {
+              basis[k] += basis[k + 1] * (-points[j].x);
+            }
+          }
+        }
+        
+        // Add weighted contribution to final coefficients
+        for (let k = 0; k < n; k++) {
+          coeffs[k] += (points[i].y * basis[k]) / denominator;
+        }
+      }
+      
+      return {
+        coefficients: coeffs,
+        degree: n - 1,
+        lagrangePolynomial: (x: number): number => {
+          let result = 0;
+          for (let i = 0; i < n; i++) {
+            result += coeffs[i] * Math.pow(x, i);
+          }
+          return result;
+        }
+      };
     } catch (error) {
       console.error("Error computing polynomial:", error);
       return null;
@@ -61,24 +103,28 @@ export const PolynomialSolver = ({ dataPoints }: PolynomialSolverProps) => {
     return Math.abs(num) < 1e-10 ? "0" : num.toFixed(6);
   };
 
-  const formatCoefficient = (coeff: number, variable: string, isFirst: boolean = false): string => {
+  const formatCoefficient = (coeff: number, power: number, isFirst: boolean = false): string => {
     if (Math.abs(coeff) < 1e-10) return "";
     
     const sign = coeff >= 0 ? (isFirst ? "" : " + ") : " - ";
     const absCoeff = Math.abs(coeff);
     
-    if (variable === "") {
+    if (power === 0) {
       return `${sign}${formatNumber(absCoeff)}`;
+    } else if (power === 1) {
+      if (Math.abs(absCoeff - 1) < 1e-10) {
+        return `${sign}x`;
+      }
+      return `${sign}${formatNumber(absCoeff)}x`;
+    } else {
+      if (Math.abs(absCoeff - 1) < 1e-10) {
+        return `${sign}x^${power}`;
+      }
+      return `${sign}${formatNumber(absCoeff)}x^${power}`;
     }
-    
-    if (Math.abs(absCoeff - 1) < 1e-10) {
-      return `${sign}${variable}`;
-    }
-    
-    return `${sign}${formatNumber(absCoeff)}${variable}`;
   };
 
-  if (!coefficients || dataPoints.length < 3) {
+  if (!coefficients || dataPoints.length < 2) {
     return (
       <Card className="w-full math-glow border-primary/20">
         <CardHeader>
@@ -87,8 +133,8 @@ export const PolynomialSolver = ({ dataPoints }: PolynomialSolverProps) => {
         <CardContent>
           <p className="text-muted-foreground">
             {dataPoints.length === 0 
-              ? "Add at least 3 data points to compute the polynomial."
-              : `Need ${3 - dataPoints.length} more data point(s) for polynomial interpolation.`
+              ? "Add at least 2 data points to compute the polynomial."
+              : `Need ${2 - dataPoints.length} more data point(s) for polynomial interpolation.`
             }
           </p>
         </CardContent>
@@ -96,15 +142,17 @@ export const PolynomialSolver = ({ dataPoints }: PolynomialSolverProps) => {
     );
   }
 
-  const { a, b, c } = coefficients;
+  const { coefficients: coeffs, degree } = coefficients;
   
-  // Build the polynomial string
+  // Build the polynomial string (display in standard form: highest degree first)
   let polynomialStr = "f(x) = ";
   const terms: string[] = [];
   
-  if (Math.abs(a) >= 1e-10) terms.push(formatCoefficient(a, "x²", terms.length === 0));
-  if (Math.abs(b) >= 1e-10) terms.push(formatCoefficient(b, "x", terms.length === 0));
-  if (Math.abs(c) >= 1e-10) terms.push(formatCoefficient(c, "", terms.length === 0));
+  for (let i = degree; i >= 0; i--) {
+    if (Math.abs(coeffs[i]) >= 1e-10) {
+      terms.push(formatCoefficient(coeffs[i], i, terms.length === 0));
+    }
+  }
   
   if (terms.length === 0) {
     polynomialStr += "0";
@@ -120,20 +168,23 @@ export const PolynomialSolver = ({ dataPoints }: PolynomialSolverProps) => {
       <CardContent className="space-y-6">
         <div className="space-y-4">
           <div>
-            <h3 className="text-lg font-semibold text-math-primary mb-2">Coefficients:</h3>
-            <div className="grid grid-cols-3 gap-4">
-              <div className="p-3 bg-secondary/30 rounded border border-primary/20">
-                <span className="text-sm text-muted-foreground">a =</span>
-                <div className="math-equation text-lg text-math-success">{formatNumber(a)}</div>
-              </div>
-              <div className="p-3 bg-secondary/30 rounded border border-primary/20">
-                <span className="text-sm text-muted-foreground">b =</span>
-                <div className="math-equation text-lg text-math-warning">{formatNumber(b)}</div>
-              </div>
-              <div className="p-3 bg-secondary/30 rounded border border-primary/20">
-                <span className="text-sm text-muted-foreground">c =</span>
-                <div className="math-equation text-lg text-math-secondary">{formatNumber(c)}</div>
-              </div>
+            <h3 className="text-lg font-semibold text-math-primary mb-2">
+              Coefficients (Degree {degree} Polynomial):
+            </h3>
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+              {coeffs.map((coeff, index) => (
+                <div key={index} className="p-3 bg-secondary/30 rounded border border-primary/20">
+                  <span className="text-sm text-muted-foreground">
+                    {index === 0 ? "c₀ =" : `c₍${index}₎ =`}
+                  </span>
+                  <div className="math-equation text-sm">
+                    {formatNumber(coeff)}
+                  </div>
+                  <div className="text-xs text-muted-foreground mt-1">
+                    {index === 0 ? "constant" : index === 1 ? "x¹" : `x^${index}`}
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
 
@@ -149,7 +200,7 @@ export const PolynomialSolver = ({ dataPoints }: PolynomialSolverProps) => {
           <div className="text-center">
             <div className="text-4xl font-bold text-math-secondary mb-2">C</div>
             <div className="math-equation text-lg">
-              Constant term: <span className="text-math-secondary">{formatNumber(c)}</span>
+              Constant term: <span className="text-math-secondary">{formatNumber(coeffs[0])}</span>
             </div>
           </div>
         </div>

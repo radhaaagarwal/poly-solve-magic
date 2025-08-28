@@ -8,32 +8,44 @@ const Index = () => {
 
   // Extract coefficients for function evaluator
   const getCoefficients = () => {
-    if (dataPoints.length < 3) return { a: 0, b: 0, c: 0 };
-    
-    const [p1, p2, p3] = dataPoints.slice(0, 3);
+    if (dataPoints.length < 2) return { coefficients: [], degree: 0 };
     
     try {
-      const x1 = p1.x, y1 = p1.y;
-      const x2 = p2.x, y2 = p2.y;
-      const x3 = p3.x, y3 = p3.y;
-
-      const denominator = x1 * x1 * (x2 - x3) + x2 * x2 * (x3 - x1) + x3 * x3 * (x1 - x2);
+      const n = dataPoints.length;
+      const points = [...dataPoints];
       
-      if (Math.abs(denominator) < 1e-10) {
-        return { a: 0, b: 0, c: 0 };
+      // Initialize coefficients array
+      const coeffs: number[] = new Array(n).fill(0);
+      
+      // Lagrange interpolation
+      for (let i = 0; i < n; i++) {
+        const basis: number[] = new Array(n).fill(0);
+        basis[n - 1] = 1;
+        
+        let denominator = 1;
+        
+        for (let j = 0; j < n; j++) {
+          if (i !== j) {
+            denominator *= (points[i].x - points[j].x);
+            
+            for (let k = 0; k < n - 1; k++) {
+              basis[k] += basis[k + 1] * (-points[j].x);
+            }
+          }
+        }
+        
+        for (let k = 0; k < n; k++) {
+          coeffs[k] += (points[i].y * basis[k]) / denominator;
+        }
       }
-
-      const a = (y1 * (x2 - x3) + y2 * (x3 - x1) + y3 * (x1 - x2)) / denominator;
-      const b = (x1 * x1 * (y2 - y3) + x2 * x2 * (y3 - y1) + x3 * x3 * (y1 - y2)) / denominator;
-      const c = (x1 * x1 * (x2 * y3 - x3 * y2) + x2 * x2 * (x3 * y1 - x1 * y3) + x3 * x3 * (x1 * y2 - x2 * y1)) / denominator;
-
-      return { a, b, c };
+      
+      return { coefficients: coeffs, degree: n - 1 };
     } catch {
-      return { a: 0, b: 0, c: 0 };
+      return { coefficients: [], degree: 0 };
     }
   };
 
-  const { a, b, c } = getCoefficients();
+  const { coefficients, degree } = getCoefficients();
 
   return (
     <div className="min-h-screen p-6">
@@ -44,7 +56,7 @@ const Index = () => {
           </h1>
           <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
             Use Lagrange interpolation to find polynomial coefficients from data points.
-            Solve for constants a, b, c in the form ax² + bx + c.
+            Supports polynomials of any degree - add n points for degree n-1 polynomial.
           </p>
         </header>
 
@@ -55,8 +67,8 @@ const Index = () => {
               onDataPointsChange={setDataPoints}
             />
             
-            {dataPoints.length >= 3 && (
-              <FunctionEvaluator a={a} b={b} c={c} />
+            {dataPoints.length >= 2 && (
+              <FunctionEvaluator coefficients={coefficients} degree={degree} />
             )}
           </div>
 

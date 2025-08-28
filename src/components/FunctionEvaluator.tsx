@@ -5,25 +5,59 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Calculator } from "lucide-react";
 
 interface FunctionEvaluatorProps {
-  a: number;
-  b: number;
-  c: number;
+  coefficients: number[];
+  degree: number;
 }
 
-export const FunctionEvaluator = ({ a, b, c }: FunctionEvaluatorProps) => {
+export const FunctionEvaluator = ({ coefficients, degree }: FunctionEvaluatorProps) => {
   const [inputX, setInputX] = useState("");
   const [result, setResult] = useState<number | null>(null);
 
   const evaluateFunction = () => {
     const x = parseFloat(inputX);
     if (!isNaN(x)) {
-      const fx = a * x * x + b * x + c;
+      // C++ equivalent: double evaluatePolynomial(const std::vector<double>& coeffs, double x)
+      let fx = 0;
+      for (let i = 0; i < coefficients.length; i++) {
+        fx += coefficients[i] * Math.pow(x, i);
+      }
       setResult(fx);
     }
   };
 
   const formatNumber = (num: number): string => {
     return Math.abs(num) < 1e-10 ? "0" : num.toFixed(6);
+  };
+
+  const formatPolynomial = (): string => {
+    if (coefficients.length === 0) return "f(x) = 0";
+    
+    const terms: string[] = [];
+    for (let i = degree; i >= 0; i--) {
+      const coeff = coefficients[i];
+      if (Math.abs(coeff) >= 1e-10) {
+        const sign = coeff >= 0 ? (terms.length === 0 ? "" : " + ") : " - ";
+        const absCoeff = Math.abs(coeff);
+        
+        if (i === 0) {
+          terms.push(`${sign}${formatNumber(absCoeff)}`);
+        } else if (i === 1) {
+          if (Math.abs(absCoeff - 1) < 1e-10) {
+            terms.push(`${sign}x`);
+          } else {
+            terms.push(`${sign}${formatNumber(absCoeff)}x`);
+          }
+        } else {
+          if (Math.abs(absCoeff - 1) < 1e-10) {
+            terms.push(`${sign}x^${i}`);
+          } else {
+            terms.push(`${sign}${formatNumber(absCoeff)}x^${i}`);
+          }
+        }
+      }
+    }
+    
+    return terms.length === 0 ? "f(x) = 0" : `f(x) = ${terms.join("")}`;
   };
 
   return (
@@ -33,7 +67,7 @@ export const FunctionEvaluator = ({ a, b, c }: FunctionEvaluatorProps) => {
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="text-center math-equation text-lg text-muted-foreground">
-          f(x) = {formatNumber(a)}x² + {formatNumber(b)}x + {formatNumber(c)}
+          {formatPolynomial()}
         </div>
         
         <div className="flex gap-2">
